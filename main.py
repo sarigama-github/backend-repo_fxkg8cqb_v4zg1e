@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from bson import ObjectId
 
 from database import db, create_document, get_documents
 from schemas import User, Car, Listing, Booking, Review
@@ -57,9 +58,47 @@ def list_listings(query: ListingQuery):
     for d in docs:
         d = dict(d)
         d["id"] = str(d.pop("_id", ""))
+        # try to enrich with car basic fields if available
+        try:
+            if d.get("car_id"):
+                car = db["car"].find_one({"_id": ObjectId(d["car_id"])})
+                if car:
+                    car["id"] = str(car.pop("_id", ""))
+                    d["car"] = car
+        except Exception:
+            pass
         items.append(d)
 
     return {"items": items}
+
+
+@app.get("/api/listings/{listing_id}")
+def get_listing_detail(listing_id: str):
+    """Fetch a single listing by id, including its car details."""
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    try:
+        lst = db["listing"].find_one({"_id": ObjectId(listing_id)})
+        if not lst:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        lst = dict(lst)
+        lst["id"] = str(lst.pop("_id", ""))
+        # attach car
+        car_doc = None
+        try:
+            if lst.get("car_id"):
+                car_doc = db["car"].find_one({"_id": ObjectId(lst["car_id"])})
+        except Exception:
+            car_doc = None
+        if car_doc:
+            car_doc = dict(car_doc)
+            car_doc["id"] = str(car_doc.pop("_id", ""))
+            lst["car"] = car_doc
+        return lst
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id format")
 
 
 @app.get("/api/cities")
