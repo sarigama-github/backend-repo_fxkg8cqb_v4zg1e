@@ -1,48 +1,76 @@
 """
-Database Schemas
+Database Schemas for RAKB (Rental Agency platform for cars and renters in Morocco)
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model represents a MongoDB collection (collection name = lowercase class name).
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List
+from datetime import date
 
-# Example schemas (replace with your own):
 
 class User(BaseModel):
     """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
+    Users of the platform: owners, renters, admins
+    Collection: "user"
     """
     name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+    email: EmailStr = Field(..., description="Email address")
+    phone: Optional[str] = Field(None, description="Phone number")
+    role: str = Field("renter", description="user role: renter | owner | admin")
+    city: Optional[str] = Field(None, description="Base city (e.g., Casablanca)")
+    is_verified: bool = Field(False, description="KYC/identity verified")
 
-class Product(BaseModel):
+
+class Car(BaseModel):
     """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
+    Car details managed by owners
+    Collection: "car"
     """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
+    owner_id: str = Field(..., description="Reference to user (owner)")
+    make: str = Field(..., description="Brand (e.g., Dacia, Peugeot)")
+    model: str = Field(..., description="Model name")
+    year: int = Field(..., ge=1980, le=2100, description="Year of manufacture")
+    transmission: str = Field(..., description="manual | automatic")
+    fuel: str = Field(..., description="gasoline | diesel | hybrid | electric")
+    seats: int = Field(..., ge=2, le=9, description="Number of seats")
+    features: List[str] = Field(default_factory=list, description="Feature tags (AC, GPS, etc.)")
+    photos: List[str] = Field(default_factory=list, description="Image URLs")
 
-# Add your own schemas here:
-# --------------------------------------------------
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+class Listing(BaseModel):
+    """
+    A rentable listing that ties a car to a location and price window
+    Collection: "listing"
+    """
+    car_id: str = Field(..., description="Reference to car")
+    owner_id: str = Field(..., description="Owner user id")
+    city: str = Field(..., description="City of pickup (e.g., Marrakech)")
+    daily_price: float = Field(..., ge=0, description="Price per day in MAD")
+    description: Optional[str] = Field(None, description="Listing description")
+    available_from: Optional[date] = Field(None, description="Availability start date")
+    available_to: Optional[date] = Field(None, description="Availability end date")
+
+
+class Booking(BaseModel):
+    """
+    A renter's reservation for a listing
+    Collection: "booking"
+    """
+    listing_id: str = Field(..., description="Listing reference")
+    renter_id: str = Field(..., description="Renter user id")
+    start_date: date = Field(..., description="Start date")
+    end_date: date = Field(..., description="End date")
+    total_price: float = Field(..., ge=0, description="Computed total price in MAD")
+    status: str = Field("pending", description="pending | confirmed | cancelled | completed")
+
+
+class Review(BaseModel):
+    """
+    Reviews left by renters for listings/owners
+    Collection: "review"
+    """
+    listing_id: str = Field(...)
+    renter_id: str = Field(...)
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
